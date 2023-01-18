@@ -48,10 +48,11 @@ class FeatureSelection():
                 Path(settings.BASE_DIR).parent, traindata_path)
             if not os.path.exists(file_path):
                 ValueError("Input file doesnt exist")
-        traindata = pd.read_csv(file_path)
-        self.train_features, self.test_features, self.train_labels, self.test_labels = train_test_split(traindata.drop(
-            labels=[label_col], axis=1), traindata[label_col], test_size=0.2, stratify=traindata[label_col], random_state=41)
-        del traindata
+        self.traindata = pd.read_csv(file_path)
+        self.train_features, self.test_features, self.train_labels, self.test_labels = train_test_split(self.traindata.drop(
+            labels=[label_col], axis=1), self.traindata[label_col], test_size=0.2, stratify=self.traindata[label_col], random_state=41)
+        
+        self.label_col = label_col
         self.max_features = max_features
         self.min_features = min_features
         self.feature_cols = feature_cols
@@ -73,7 +74,7 @@ class FeatureSelection():
         self.treat_nas()
         self.random_forest_feature_selector()
         self.exhaustive_model_builder()
-        self.logistic_regression()
+        
 
     def remove_constant_columns(self):
         constant_filter = VarianceThreshold(threshold=0)
@@ -141,7 +142,7 @@ class FeatureSelection():
                                FeatureSelection.MAX_SHORT_LIST_FEATURES)
         else:
             n_estimators = int(math.sqrt(len(self.train_features.columns)))
-        feature_selector = SequentialFeatureSelector(LogisticRegression(random_state=123), k_features=self.short_list_max_features, forward=True, verbose=2, scoring=self.scoring, cv=self.cv, n_jobs=1)
+        feature_selector = SequentialFeatureSelector(LogisticRegression(random_state=123), k_features=self.short_list_max_features, forward=True, verbose=2, scoring=self.scoring, cv=self.cv, n_jobs=-1)
         self.short_list_features = feature_selector.fit(
             self.train_features, self.train_labels)
         # takes the best one where k=number of features, this may not be the best one as
@@ -153,11 +154,11 @@ class FeatureSelection():
 
     def exhaustive_model_builder(self):
         #  this will generate all combinations of variables in an exhaustive search, will take time for large datasets
-        model_type = LogisticRegression(n_jobs=-1)
+        model_type = LogisticRegressionCV(cv=self.cv)
         feature_selector = ExhaustiveFeatureSelector(
-            model_type, min_features=self.min_features, max_features=self.max_features, scoring=self.scoring, print_progress=True, cv=self.cv)
+            model_type, min_features=self.min_features, max_features=self.max_features, scoring=self.scoring, print_progress=True,cv=0)
         self.models = feature_selector.fit(
-            self.train_features[self.filtered_features_list], self.train_labels)
+            self.traindata[self.filtered_features_list], self.traindata[self.label_col])
         # This contains results of all combinations of models
         models_ = self.models.subsets_.values()
         self.models_all = sorted(models_, key=lambda d: d['avg_score'], reverse=True)[0:4]
@@ -167,32 +168,17 @@ class FeatureSelection():
             tm = TopModels_internal(cv_scores=list(m['cv_scores']), avg_score=m['avg_score'], rank=i, selected_features=list(m['feature_names']))
             self.top_models_list.append(tm)
 
-    def logistic_regression(self):
-        
-        log_reg = LogisticRegressionCV(cv=5,n_jobs=-1)
-
-        log_reg.fit(self.train_features[['M221', 'MOB']], self.train_labels)
-        self.Y_preds_test = log_reg.predict(self.test_features[['M221', 'MOB']])
-        self.Y_preds_train = log_reg.predict(self.train_features[['M221', 'MOB']])
-        self.Y_preds_prob_test = log_reg.predict_proba(self.test_features[['M221', 'MOB']])
-        self.Y_preds_prob_train = log_reg.predict_proba(self.train_features[['M221', 'MOB']])
-        self.logit = log_reg
-        # extract the positive columns for each output
-        print('accuracy : ',accuracy_score(self.test_labels,self.Y_preds_test))
-        print('roc_auc :',roc_auc_score(self.test_labels, self.Y_preds_prob_test[:,1]))
-        print('roc_auc :',roc_auc_score(self.train_labels, self.Y_preds_prob_train[:,1]))
-        print('f1 : ',f1_score(self.test_labels,self.Y_preds_test))
-
+    
 # %%
 if __name__ == '__main__':
     santandar_data = pd.read_csv("sample_py_df.csv")
     fp = 'sample_py_df.csv'
 
-    mfs = FeatureSelection(fp, 'def_trig', max_features=2, feature_cols=None, cross_validation=0, exclude_features=None, fixed_features=None, variance_threshold=0.01, scoring='roc_auc',
-                           min_features=2, cv=4, short_list_max_features=4)
+    mfs = FeatureSelection(fp, 'def_trig', max_features=2, feature_cols=None, cross_validation=3, exclude_features=None, fixed_features=None, variance_threshold=0.01, scoring='roc_auc',
+                           min_features=2,  short_list_max_features=4)
     print(mfs.models.subsets_)
     print(mfs.models)
-    print(mfs.models.best_feature_names_)
-    print(mfs.models.best_score_)
+    print("Feature names : ",mfs.models.best_feature_names_)
+    print("Score : ",mfs.models.best_score_)
 
 # %%

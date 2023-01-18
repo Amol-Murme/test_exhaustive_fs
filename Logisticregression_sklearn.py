@@ -25,6 +25,7 @@ class LogisticRegressionModel_sklearn():
         # self.test_result = ClassificationMetrics(type='test')  # initialise
         # self.overall_result = OverallClassificationResults()  # initialise this
         self.label_col = label_col
+        self.cv = cross_validation
         self.logistic_threshold = logistic_threshold
         self.train_input_data = self.read_csv_data(train_filepath, inferSchema=inferSchema)
         self.feature_cols = feature_cols
@@ -47,7 +48,7 @@ class LogisticRegressionModel_sklearn():
             self.train_split()
         else:
             self.create_train_test_features()
-        self.delete_inputs()
+        #self.delete_inputs()
         #self.get_train_test_row_count()
         # print("self.train.count " + str(self.train.count()))
         # print("self.test.count " + str(self.test.count()))
@@ -124,19 +125,17 @@ class LogisticRegressionModel_sklearn():
         pass
 
     def build_logistic_regression_model_using_sklearn(self):
-        from sklearn.linear_model import LogisticRegression
-        log_reg = LogisticRegression(n_jobs=-1)
-
-        log_reg.fit(self.train_features, self.train_labels)
-        self.Y_preds_test = log_reg.predict(self.test_features)
-        self.Y_preds_train = log_reg.predict(self.train_features)
-        self.Y_preds_prob_test = log_reg.predict_proba(self.test_features)
-        self.Y_preds_prob_train = log_reg.predict_proba(self.train_features)
+        from sklearn.linear_model import LogisticRegressionCV
+        log_reg = LogisticRegressionCV(cv=self.cv)
+        X = self.train_input_data.drop(self.label_col,axis=1)
+        y = self.train_input_data[self.label_col]
+        log_reg.fit(X,y)
+        self.Y_pred= log_reg.predict(X)
+        self.Y_pred_proba = log_reg.predict_proba(X)
         self.logit = log_reg
         # extract the positive columns for each output
-        print(accuracy_score(self.test_labels,self.Y_preds_test))
-        print(roc_auc_score(self.test_labels, self.Y_preds_prob_test[:,1]))
-        print(roc_auc_score(self.train_labels, self.Y_preds_prob_train[:,1]))
+        print("Accuracy : ",accuracy_score(y,self.Y_pred))
+        print("roc_auc score : ",roc_auc_score(y, self.Y_pred_proba[:,1]))
         # fpr, tpr, thresholds = roc_curve(self.test_labels,self.Y_preds_test, pos_label=2)
         # print(auc(fpr, tpr))
         # self.Y_preds = Y_preds
@@ -245,4 +244,4 @@ if __name__ == '__main__':
     santandar_data = pd.read_csv("sample_py_df.csv")
     fp = 'sample_py_df.csv'
     feature_cols = ['M221', 'MOB']
-    lgm = LogisticRegressionModel_sklearn(fp, 'def_trig', feature_cols=feature_cols,train_percent=0.8,test_percent=0.2, cross_validation=2)
+    lgm = LogisticRegressionModel_sklearn(fp, 'def_trig', feature_cols=feature_cols,train_percent=0.8,test_percent=0.2, cross_validation=3)
